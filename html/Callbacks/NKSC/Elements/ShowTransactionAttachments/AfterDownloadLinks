@@ -1,0 +1,22 @@
+<br /><a href="<% $url %>"><% loc('Create task for Sandbox') %></a>
+<%ARGS>
+$Object => undef
+$Transaction => undef
+$Attachment => undef
+</%ARGS>
+<%INIT>
+my $SandboxQueue = RT::Config->Get('SandboxQueue') || 'Sandbox';
+my $Queue = RT::Queue->new($session{CurrentUser});
+
+unless ($Queue->Load($SandboxQueue)) {
+    RT::Logger->error('Couldn\'t find SandboxQueue config nor Sandbox queue');
+    return;
+}
+
+return if $Attachment->ContentType =~ /(text\/plain|text\/html)/i;
+
+my $url = "/Ticket/Create.html?"
+    . 'Queue=' . $Queue->Id
+    . "&MemberOf=" . $Object->Id
+    . "&Attachment=" . $Attachment->Id;
+</%INIT>

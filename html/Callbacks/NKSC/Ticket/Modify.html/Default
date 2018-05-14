@@ -1,0 +1,20 @@
+<%ARGS>
+$TicketObj => undef
+$ARGSRef   => {}
+</%ARGS>
+<%INIT>
+my %QueueComponent = (
+	RT->Config->Get('SandboxQueue') || 'Sandbox'                 => '/Ticket/Modify/Sandbox.html',
+	RT->Config->Get('VulnerabilitiesQueue') || 'Vulnerabilities' => '/Ticket/Modify/Vulnerabilities.html',
+	RT->Config->Get('IntelMQQueue') || 'IntelMQ'                 => '/Ticket/Modify/Modify.html',
+	RT->Config->Get('MISPQueue') || 'MISP'                       => '/Ticket/Modify/Modify.html',
+);
+
+my $QueueObj = $TicketObj->QueueObj;
+
+return unless $QueueComponent{ $QueueObj->Name }
+	&& $m->comp_exists( $QueueComponent{ $QueueObj->Name } );
+
+$m->subexec( $QueueComponent{ $QueueObj->Name }, %$ARGSRef, Queue => $QueueObj->Id );
+$m->abort;
+</%INIT>

@@ -1,0 +1,21 @@
+<%ARGS>
+$TicketObj => undef,
+$ARGSRef   => {}
+</%ARGS>
+<%INIT>
+return unless $ARGSRef->{Attachment} && $ARGSRef->{AttachmentField};
+
+my $Attachment = RT::Attachment->new( $session{CurrentUser} );
+
+return unless
+	$Attachment->Load( $ARGSRef->{Attachment} );
+
+my ($status, $message) = $$TicketObj->AddCustomFieldValue(
+	Field        => $ARGSRef->{AttachmentField},
+	Value        => $Attachment->Filename,
+	LargeContent => $Attachment->Content,
+	ContentType  => $Attachment->ContentType
+);
+
+RT::Logger->warning($message) unless $status;
+</%INIT>

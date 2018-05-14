@@ -1,0 +1,43 @@
+% for my $Queue ( @Queues ) {
+%    my $Tickets = RT::Tickets->new( $session{CurrentUser} );
+% 
+%	$Tickets->LimitQueue( VALUE => $Queue );
+%   $Tickets->LimitMemberOf( $Ticket->Id );
+
+%	next unless $Tickets->Count;
+
+	<&| /Widgets/TitleBox, 
+	    title       => $Queue, 
+	    title_class => 'inverse',
+	    class       => 'ticket-info-links'
+	&>
+
+	<& /Elements/CollectionList,
+	   %ARGS,
+	   Collection     => $Tickets,
+	   DisplayFormat  => $Format,
+	   Format         => $Format,
+	   Rows           => $Tickets->Count,
+	   ShowHeader     => 0,
+	   OrderBy        => 'id',
+	   ShowNavigation => 0,
+	   AllowSorting   => 0,
+	   PassArguments  => 0
+	&>
+	</&>
+% }
+<%ARGS>
+$Ticket => undef
+</%ARGS>
+<%INIT>
+my @Queues = (
+	RT->Config->Get('SandboxQueue') || 'Sandbox',
+	RT->Config->Get('IntelMQQueue') || 'IntelMQ',
+	RT->Config->Get('MISPQueue') || 'MISP'
+);
+
+my $Format = q{'<b><a href="__RTIRTicketURI__">__id__</a></b>/TITLE:#',}.
+    q{'<b><a href="__RTIRTicketURI__">__Subject__</a></b>/TITLE:Subject',}.
+    q{Status};
+
+</%INIT>

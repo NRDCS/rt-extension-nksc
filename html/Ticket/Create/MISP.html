@@ -1,0 +1,201 @@
+<& /Elements/Header, Title => $Title &>
+<& /Elements/Tabs &>
+    
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<% RT->Config->Get('WebPath') %>/Ticket/Create/MISP.html" enctype="multipart/form-data"
+    method="post" name="TicketCreate" class="custom-ticket-form">
+    <input type="submit" name="SubmitTicket" value="Create" style="display:none">
+    <input type="hidden" class="hidden" name="id" value="new" />
+    <input type="hidden" class="hidden" name="Token" value="<% $ARGS{'Token'} %>" />
+    <input type="hidden" class="hidden" name="Requestor" value="<% $session{CurrentUser}->EmailAddress %>">
+    <input type="hidden" class="hidden" name="Status" value="new">
+%   if ( $ParentObj ) {
+    <input type="hidden" class="hidden" name="new-MemberOf" value="<% $ParentObj->Id %>">   
+%   }
+    <div id="ticket-create-basics">
+        <&| /Widgets/TitleBox, title => loc("Basics"), class=>'ticket-info-basics' &>
+            <input type="hidden" class="hidden" name="Queue" value="<% $QueueObj->Id %>" />
+            <table border="0">
+                <tr>
+                    <td class="label"><&|/l&>Queue</&>:</td>
+                    <td class="value"><% $QueueObj->Name %></td>
+                </tr>
+                <tr>
+                    <td class="label"><&|/l&>Status</&>:</td>
+                    <td class="value"><&|/l&>new</&></td>
+                </tr>
+%               if ( $ParentObj ) {
+                <tr>
+                    <td class="label"><&|/l&>Parent</&>:</td>
+                    <td class="value">
+                        <a href="/Ticket/Display.html?id=<% $ParentObj->Id %>">
+                            <% loc('#') . ' ' . $ParentObj->Id %>: <% $ParentObj->Subject %>
+                        </a>        
+                    </td>
+                </tr>
+                <tr>
+                    <td class="label"><&|/l&>Subject</&>:</td>
+                    <td class="value" colspan="5">
+                        <input type="text" name="Subject" maxsize="200" value="<% $ParentObj->Subject %>" />
+                    </td>
+                </tr>
+%               } else {
+                <tr>
+                    <td class="label"><&|/l&>Subject</&>:</td>
+                    <td class="value" colspan="5">
+                        <input type="text" name="Subject" maxsize="200" value="" />
+                    </td>
+                </tr>
+% }
+            </table>
+        </&>
+        <& /Elements/EditCustomFieldCustomGroupings,
+            %ARGS,
+            Object => $TicketObj,
+            CustomFieldGenerator => sub { $CustomFields },
+            ForCreation => 1,
+            Cols => 30
+        &>
+        <& /Elements/Submit, Label => loc("Create") &>
+    </div>
+</form>
+<%INIT>
+use URI;
+
+my @results;
+
+my $QueueObj  = RT::Queue->new( $session{CurrentUser} );
+my $TicketObj = RT::Ticket->new( $session{CurrentUser} );
+
+Abort(loc("Queue [_1] could not be loaded.", $Queue||'')) unless $QueueObj->Load( $Queue );
+Abort(loc("Cannot create tickets in a disabled queue.")) if $QueueObj->Disabled;
+
+my $CustomFields = $QueueObj->TicketCustomFields;
+my $Title   = loc("Create a new ticket in [_1]", $m->scomp("/Ticket/Elements/ShowQueue", QueueObj => $QueueObj));
+
+my ( $ParentObj, %CustomFieldValues );
+
+if ( $MemberOf ) {
+    $ParentObj = LoadTicket( $MemberOf );
+    Abort(loc("Cannot load parent ticket object")) unless $ParentObj->Id;
+}
+
+if ( $ParentObj ) {
+
+    my $Values;
+    my @Values;
+
+    my %LoadableCustomFields = (
+        'Network activity url' => 'URLs',
+        'Network activity ip-dst' => 'IP',
+        'Description' => 'Description'
+    );
+
+    for my $field ( keys %LoadableCustomFields ) {
+        my $CustomField = RT::CustomField->new( $session{CurrentUser} );
+
+        next unless $CustomField->Load( $field );
+
+        $Values = $ParentObj->CustomFieldValues( $LoadableCustomFields{$field} );
+        @Values = ();
+
+        while ( my $Value = $Values->Next ) {
+            push @Values, $Value->Content;
+        }
+
+        if ( @Values > 1 && $CustomField->Type eq 'Select' ) {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = \@Values;
+        } else {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = join "\n",
+            @Values;
+        }
+    }
+
+    my %Hashes = (
+        32 => 'Payload delivery md5',
+        40 => 'Payload delivery sha1',
+        64 => 'Payload delivery sha256'
+    );
+    my %FieldValues = ();
+
+    $Values = $ParentObj->CustomFieldValues( 'Hashes' );
+
+    while ( my $Value = $Values->Next ) {
+        my $length = length $Value->Content;
+
+        next unless exists( $Hashes{$length} );
+
+        if ( exists( $FieldValues{ $Hashes{$length} } ) ) {
+            push @{$FieldValues{ $Hashes{$length} }}, $Value->Content;
+        } else {
+            @{$FieldValues{ $Hashes{$length} }} = ();
+            push @{$FieldValues{ $Hashes{$length} }}, $Value->Content;
+        }
+    }
+
+    for my $field ( keys %FieldValues ) {
+        my $CustomField = RT::CustomField->new( $session{CurrentUser} );
+
+        next unless $CustomField->Load( $field );
+
+        if (@{ $FieldValues{$field} } > 1 && $CustomField->Type eq 'Select' ) {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = \@{ $FieldValues{$field} };
+        } else {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = join "\n",
+            @{ $FieldValues{$field} };
+        }
+    }
+
+    $Values = $ParentObj->CustomFieldValues( 'URLs' );
+    @Values = ();
+
+    while ( my $Value = $Values->Next ) {
+        my $url = URI->new( $Value->Content );
+
+        push @Values, $url->host;
+
+    }
+
+    for ( ('Network activity domain', 'Network activity hostname') ) {
+        my $CustomField = RT::CustomField->new( $session{CurrentUser} );
+        next unless $CustomField->Load( $_ );
+
+        if ( @Values > 1 && $CustomField->Type eq 'Select' ) {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = \@Values;
+        } else {
+            $ARGS{ GetCustomFieldInputName( CustomField => $CustomField ) } = join "\n",
+            @Values;
+        }
+    }
+}
+
+my $checks_failure = 0;
+
+{
+    my ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields    => $QueueObj->TicketCustomFields,
+        ARGSRef         => \%ARGS
+    );
+
+    unless ($status) {
+        $checks_failure = 1;
+        push @results, @msg;
+    }
+}
+
+my $skip_create = 0;
+
+if ((!exists $ARGS{'AddMoreAttach'}) and (defined($ARGS{'id'}) and $ARGS{'id'} eq 'new')) { # new ticket?
+    if ( !$checks_failure && !$skip_create) {
+        $m->comp('/Ticket/Display.html', %ARGS);
+        $m->abort();
+    }
+}
+</%INIT>
+
+<%ARGS>
+$Queue       => undef
+$MemberOf    => undef
+</%ARGS>

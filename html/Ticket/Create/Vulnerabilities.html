@@ -1,0 +1,97 @@
+<& /Elements/Header, Title => $Title &>
+<& /Elements/Tabs &>
+    
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<% RT->Config->Get('WebPath') %>/Ticket/Create.html" enctype="multipart/form-data"
+	method="post" name="TicketCreate" class="custom-ticket-form">
+	<input type="submit" name="SubmitTicket" value="Create" style="display:none">
+	<input type="hidden" class="hidden" name="id" value="new" />
+	<input type="hidden" class="hidden" name="Token" value="<% $ARGS{'Token'} %>" />
+	<input type="hidden" class="hidden" name="Requestor" value="<% $session{CurrentUser}->EmailAddress %>">
+	<input type="hidden" class="hidden" name="Status" value="new">
+
+	<div id="ticket-create-basics">
+    	<&| /Widgets/TitleBox, title => loc("Basics"), class=>'ticket-info-basics' &>
+	    	<input type="hidden" class="hidden" name="Queue" value="<% $QueueObj->Id %>" />
+	    	<table border="0">
+	    		<tr>
+	    			<td class="label"><&|/l&>Queue</&>:</td>
+	    			<td class="value"><% $QueueObj->Name %></td>
+				</tr>
+	    		<tr>
+	    			<td class="label"><&|/l&>Status</&>:</td>
+	    			<td class="value"><&|/l&>new</&></td>
+				</tr>
+				<tr>
+					<td class="label"><&|/l&>Subject</&>:</td>
+					<td class="value" colspan="5">
+						<input type="text" name="Subject" maxsize="200" value="<%$ARGS{Subject} || ''%>" />
+					</td>
+				</tr>
+	    	</table>
+	  	</&>
+		<& /Elements/EditCustomFieldCustomGroupings,
+			%ARGS,
+			Object => $TicketObj,
+			CustomFieldGenerator => sub { $CustomFields },
+			ForCreation => 1,
+			Cols => 30
+		&>
+		<& /Elements/Submit, Label => loc("Create") &>
+	</div>
+</form>
+<%INIT>
+my @results;
+
+my $QueueObj  = RT::Queue->new( $session{CurrentUser} );
+my $TicketObj = RT::Ticket->new( $session{CurrentUser} );
+
+Abort(loc("Queue [_1] could not be loaded.", $Queue||'')) unless $QueueObj->Load( $Queue );
+Abort(loc("Cannot create tickets in a disabled queue.")) if $QueueObj->Disabled;
+
+my @TicketCustomFields = (
+	RT->Config->Get('UrlCustomField') || 'URL'
+);
+
+my $CustomFields = $QueueObj->TicketCustomFields;
+$CustomFields->Limit(
+	FIELD         => 'name',
+	OPERATOR      => 'IN',
+	VALUE         => \@TicketCustomFields,
+	CASESENSITIVE => 0
+);
+
+my $Title   = loc("Create a new ticket in [_1]", $m->scomp("/Ticket/Elements/ShowQueue", QueueObj => $QueueObj));
+
+my $checks_failure = 0;
+
+{
+    my ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        CustomFields    => $QueueObj->TicketCustomFields,
+        ARGSRef         => \%ARGS
+    );
+
+    unless ($status) {
+        $checks_failure = 1;
+        push @results, @msg;
+    }
+}
+
+my $skip_create = 0;
+
+if ((!exists $ARGS{'AddMoreAttach'}) and (defined($ARGS{'id'}) and $ARGS{'id'} eq 'new')) { # new ticket?
+    if ( !$checks_failure && !$skip_create) {
+        $m->comp('/Ticket/Display.html', %ARGS);
+        $m->abort();
+    }
+}
+</%INIT>
+
+<%ARGS>
+$Queue       => undef
+$MemberOf    => undef
+$Transaction => undef
+$Attachment  => undef
+</%ARGS>

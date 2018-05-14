@@ -1,0 +1,19 @@
+<%INIT>
+my $tools = RT->Config->Get('NKSCResearchTools') || ();
+</%INIT>
+
+<table class="lookup-tool-forms">
+% for my $tool (@$tools) {
+%     if ($m->comp_exists('/Tools/Elements/ToolForm' . $tool)) {
+%         $m->comp('/Tools/Elements/ToolForm' . $tool, %ARGS);
+%    }
+% }
+</table>
+
+<%perl>
+for my $tool (@$tools) {
+    if ($m->comp_exists('/Tools/Elements/ToolResults' . $tool)) {
+        $m->comp('/Tools/Elements/ToolResults' . $tool, %ARGS);
+    }
+}
+</%perl>

@@ -1,0 +1,62 @@
+<%INIT>
+my $TicketObj = RT::Ticket->new( $session{CurrentUser} );
+
+return unless $m->request_comp->path =~ /Display.html/
+    && $DECODED_ARGS->{id}
+    && $TicketObj->Load( $DECODED_ARGS->{id} );
+
+if ( RT::IR->IsIncidentQueue( $TicketObj->QueueObj ) ) {
+
+    for my $Queue ( (
+        RT->Config->Get('SandboxQueue') || 'Sandbox',
+        RT->Config->Get('IntelMQQueue') || 'IntelMQ',
+        RT->Config->Get('MISPQueue') || 'MISP'
+    ) ) {
+        my $QueueObj = RT::Queue->new( $session{CurrentUser} );
+        next unless $QueueObj->Load( $Queue );
+
+        PageMenu()->child(
+            $Queue => title => loc("Create ticket in [_1]", $QueueObj->Name), 
+            path => "/Ticket/Create.html?Queue=" . $QueueObj->Id . "&MemberOf=" . $TicketObj->Id
+        );
+    }
+}
+
+my $Next      = $TicketObj->FirstActiveStatus;
+my $Lifecycle = $TicketObj->LifecycleObj;
+
+return unless $Lifecycle->Name eq 'external'
+    && $Lifecycle->IsInitial( $TicketObj->Status )
+    && $Lifecycle->IsValid( $Next )
+    && $Lifecycle->IsTransition( $TicketObj->Status => $Next )
+    && $TicketObj->CurrentUserHasRight( $Lifecycle->CheckRight( $TicketObj->Status => $Next ) );
+
+my $query_string = sub {
+    my %args = @_;
+    my $u    = URI->new();
+    $u->query_form(map { $_ => $args{$_} } sort keys %args);
+    return $u->query || '';
+};
+
+foreach my $info ( $Lifecycle->Actions( $TicketObj->Status ) ) {
+    next unless $info->{'to'} eq $Next;
+
+    my $action = $info->{'update'} || '';
+    my $url = '/Ticket/Update.html?';
+
+    $url .= $query_string->(
+        $action 
+            ? (Action        => $action)
+            : (SubmitTicket  => 1, Status => $Next),
+        DefaultStatus => $Next,
+        id            => $TicketObj->Id,
+    );
+
+    my $key = $info->{'label'} || ucfirst($Next);
+
+    PageMenu()
+        ->child( tickets => title => loc($key), path => $url );
+
+    last;
+}
+</%INIT>

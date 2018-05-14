@@ -1,0 +1,96 @@
+<& /Elements/Header, Title => $Title &>
+<& /Elements/Tabs &>
+    
+<& /Elements/ListActions, actions => \@results &>
+
+<form action="<% RT->Config->Get('WebPath') %>/Ticket/Modify/Vulnerabilities.html" enctype="multipart/form-data"
+	method="post" name="TicketModify" id="TicketModify" class="custom-ticket-form">
+	<input type="hidden" class="hidden" name="id" value="<% $TicketObj->Id %>" />
+	<input type="hidden" class="hidden" name="Token" value="<% $ARGS{'Token'} %>" />
+	<div id="ticket-create-basics">
+    	<&| /Widgets/TitleBox, title => loc("Basics"), class=>'ticket-info-basics' &>
+	    	<table border="0">
+	    		<tr>
+	    			<td class="label"><&|/l&>Queue</&>:</td>
+	    			<td class="value"><% $QueueObj->Name %></td>
+				</tr>
+	    		<tr>
+	    			<td class="label"><&|/l&>Status</&>:</td>
+	    			<td class="value"><&|/l&><% $TicketObj->Status %></&></td>
+				</tr>
+	    	</table>
+	  	</&>
+		<& /Elements/EditCustomFieldCustomGroupings,
+			%ARGS,
+			Object => $TicketObj,
+			CustomFieldGenerator => sub { $CustomFields },
+			ForCreation => 1,
+			Cols => 30
+		&>
+		<& /Elements/Submit, Label => loc('Save Changes') &>
+	</div>
+</form>
+<%INIT>
+my $TicketObj    = LoadTicket($id);
+my $QueueObj     = $TicketObj->QueueObj;
+
+my @TicketCustomFields = (
+	RT->Config->Get('UrlCustomField') || 'URL'
+);
+
+my $CustomFields = $QueueObj->TicketCustomFields;
+$CustomFields->Limit(
+	FIELD         => 'name',
+	OPERATOR      => 'IN',
+	VALUE         => \@TicketCustomFields,
+	CASESENSITIVE => 0
+);
+
+my $Title = loc('Modify ticket #[_1]',$TicketObj->Id);
+
+my @results;
+my $skip_update = 0;
+
+{
+    my ($status, @msg) = $m->comp(
+        '/Elements/ValidateCustomFields',
+        Object       => $TicketObj,
+        CustomFields => $CustomFields,
+        ARGSRef      => \%ARGS,
+    );
+    unless ($status) {
+        push @results, @msg;
+        $skip_update = 1;
+    }
+}
+
+unless ($skip_update) {
+    $TicketObj->Atomic(sub{
+        push @results, ProcessTicketBasics(TicketObj => $TicketObj, ARGSRef => \%ARGS);
+        push @results, ProcessTicketWatchers(TicketObj => $TicketObj, ARGSRef => \%ARGS);
+        push @results, ProcessObjectCustomFieldUpdates(Object => $TicketObj, ARGSRef => \%ARGS);
+        $m->callback( CallbackName => 'ProcessUpdates', TicketObj => $TicketObj,
+                      ARGSRef => \%ARGS, Results => \@results );
+    });
+
+    MaybeRedirectForResults(
+        Actions   => \@results,
+        Path      => "/Ticket/Modify.html",
+        Arguments => { id => $TicketObj->id },
+    );
+}
+
+unless ($TicketObj->CurrentUserHasRight('ShowTicket')) {
+    if (@results) {
+        Abort("A change was applied successfully, but you no longer have permissions to view the ticket", Actions => \@results);
+    } else {
+        Abort("No permission to view ticket");
+    }
+}
+
+$TicketObj->CurrentUser->AddRecentlyViewedTicket($TicketObj);
+
+</%INIT>
+<%ARGS>
+$id => undef
+</%ARGS>

@@ -1,0 +1,131 @@
+<%init>
+use Regexp::Common qw(URI);
+
+my $show_links = sub {
+    my $request_path = $HTML::Mason::Commands::r->path_info;
+
+    $request_path =~ s!/{2,}!/!g;
+
+    return 0 if $request_path =~ /(SelfService|Lookup\.html)/;
+    return 1;
+};
+
+my $escaper = sub {
+    my $content = shift;
+
+    RT::Interface::Web::EscapeHTML( \$content );
+
+    return $content;
+}; 
+
+my $urlResolver = sub {
+    my $Ticket      = shift;
+    my $CustomField = shift;
+    my $Value       = shift;
+
+    return '/Helpers/AddCustomFieldValue?'
+        . 'Ticket=' . $Ticket
+        . '&CustomField=' . $CustomField
+        . '&Value=' . $Value;
+};
+
+my $hashAction = sub {
+    my %args = @_;
+
+    $args{value} = $escaper->($args{value});
+
+    return $args{value} 
+        unless $args{object} && $args{object}->isa('RT::Ticket') && $show_links->();
+
+    my $hash = $args{value};
+    $hash =~ s/://g;
+
+    my $url = $urlResolver->($args{object}->Id, 'Hashes', lc $hash);
+
+    return $args{value}
+        . " <a class='add-cf-value button' href='$url'>" 
+        . loc('Add Hash') . "</a>";
+};
+
+
+my $urlAction = sub {
+    my %args = @_;
+
+    $args{value} = $escaper->($args{value});
+
+    return $args{value} 
+        unless $args{object} && $args{object}->isa('RT::Ticket') && $show_links->();
+
+    my $url = $urlResolver->($args{object}->Id, 'URLs', $args{value});
+
+    return $args{value}
+        . " <a class='add-cf-value button' href='$url'>"
+        . loc('Add URL') . "</a>";
+};
+
+my $timeAction = sub {
+    my %args = @_;
+
+    $args{value} = $escaper->($args{value});
+
+    return $args{value} 
+        unless $args{object} && $args{object}->isa('RT::Ticket') && $show_links->();
+
+    my $url = $urlResolver->($args{object}->Id, 'Incident time', $args{value});
+
+    return $args{value}
+        . " <a class='add-cf-value button' href='$url'>"
+        . loc('Add Incident Time') . "</a>";
+};
+
+my %actions = (
+    hash    => $hashAction,
+    url     => $urlAction,
+    time    => $timeAction
+);
+
+my @types = (
+    {
+        name   => 'hash',
+        regex  => qr{\b([0-9a-f]{32,64}|[0-9A-Fa-f\:]{47,95})\b},
+        action => 'hash'
+    },
+    {
+        name   => 'url',
+        regex  => qr{$RE{URI}{HTTP}{-keep}{-scheme => 'https?'}(?:#[^\s<]+)?(?<![.?!,;:])},
+        action => 'url'
+    },
+    {
+        name   => 'time',
+        regex  => qr{(?:^|\w)[A-Za-z]{3}[0-9\:\s]{12}|[0-9]{2}\/\w{3}\/[0-9]{4}\:[0-9]{2}\:[0-9]{2}\:[0-9]{2}\s\+[0-9]{4}|[0-9]{4}\-[0-9]{2}\-[0-9]{2}\s[0-9]{2}\:[0-9]{2}\:[0-9]{2}|[0-9]{2}\s\w{3}\s[0-9]{4}\s[0-9]{2}\:[0-9]{2}\:[0-9]{2}\s\+[0-9]{4}},
+        action => 'time'
+    }
+);
+
+
+unless (ref $ARGS{cache} && defined ${$ARGS{cache}}) {
+    ${$ARGS{cache}} = sub {
+        my $type = shift;
+        my $content = shift;
+        if ($type eq 'fetch') {
+            my $parent_args = $m->caller_args(1);
+            return if $parent_args->{lookup_params};
+
+            require Digest::SHA;
+            return $m->cache->get(Digest::SHA::sha512_base64(Encode::encode( "UTF-8", $$content)));
+        } elsif ($type eq 'store') {
+            require Digest::SHA;
+            $m->cache->set(Digest::SHA::sha512_base64(Encode::encode( "UTF-8", $$content)),
+                           $$content,
+                           "6 hours");
+        } else {
+            RT->Logger->error("Invalid type $type passed to MakeClicky's cache");
+        }
+    }
+} else {
+    RT->Logger->info("Someone else defined a MakeClicky cache, skipping ours");
+}
+
+%{$ARGS{actions}} = ( %{$ARGS{actions}}, %actions );
+push @{$ARGS{types}}, @types;
+</%init>

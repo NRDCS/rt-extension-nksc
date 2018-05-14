@@ -1,0 +1,22 @@
+NAME
+    RT-Extension-NKSC - RT and RTIR modifications for NKSC
+
+
+RT VERSION
+    Works with RT > 4.2.0
+
+INSTALLATION
+    perl Makefile.PL
+    make
+    make install
+        May need root permissions
+
+    Edit your /opt/rt4/etc/RT_SiteConfig.pm
+        Add this line:
+
+            Plugin('RT::Extension::NKSC');
+
+    Clear your mason cache
+            rm -rf /opt/rt4/var/mason_data/obj
+
+    Restart your webserver

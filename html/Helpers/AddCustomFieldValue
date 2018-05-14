@@ -1,0 +1,41 @@
+<%ARGS>
+$Ticket       => undef
+$CustomField  => undef
+$Value        => undef
+</%ARGS>
+<%INIT>
+$r->content_type('application/json; charset=utf-8');
+
+my $abort = sub {
+    my $code = shift;
+    my $msg  = shift;
+    
+    $r->status($code || HTTP::Status::HTTP_OK);
+    $m->out(JSON({ message => $msg }));
+    $m->abort;
+};
+
+$abort->(
+	HTTP::Status::HTTP_BAD_REQUEST, 
+	loc('Missing parameters')
+) unless defined $Ticket
+     and defined $CustomField
+     and defined $Value;
+
+my $CurrentUser = $session{'CurrentUser'};
+
+$abort->(HTTP::Status::HTTP_FORBIDDEN, loc('Unauthorized')) 
+	unless $CurrentUser->Privileged;
+
+my $TicketObj = RT::Ticket->new($CurrentUser);
+
+$abort->(HTTP::Status::HTTP_NOT_FOUND, loc("Ticket #$Ticket not found")) 
+	unless $TicketObj->Load($Ticket);
+
+my ($status, $message) = $TicketObj->AddCustomFieldValue(Field => $CustomField, Value => $Value);
+
+$abort->(HTTP::Status::HTTP_BAD_REQUEST, $message) 
+	unless $status;
+
+$abort->(HTTP::Status::HTTP_OK, loc('Added value to Ticket\'s CustomField') . ": $CustomField");
+</%INIT>
