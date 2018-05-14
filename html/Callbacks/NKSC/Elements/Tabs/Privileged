@@ -1,7 +1,7 @@
 <%INIT>
 my $TicketObj = RT::Ticket->new( $session{CurrentUser} );
 
-return unless $m->request_comp->path =~ /Display.html/
+return unless $m->request_comp->path =~ /Incident\/Display.html/
     && $DECODED_ARGS->{id}
     && $TicketObj->Load( $DECODED_ARGS->{id} );
 
