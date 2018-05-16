@@ -1,0 +1,26 @@
+<%ARGS>
+$language => undef
+</%ARGS>
+<%INIT>
+use JSON;
+
+$r->content_type('application/json; charset=utf-8');
+ 
+my $articles = RT::Articles->new( $session{'CurrentUser'} );
+
+$articles->Limit(
+	FIELD => 'Name',
+	OPERATOR => 'LIKE',
+	VALUE => $language,
+);
+
+my @articles;
+
+while (my $article = $articles->Next) {
+	push @articles, { id => $article->Id, name => $article->Name }; 
+}
+
+$m->out(encode_json(\@articles));
+$m->abort;
+</%INIT>
+

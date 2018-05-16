@@ -1,0 +1,6 @@
+<%ARGS>
+$skip => undef
+</%ARGS>
+<%INIT>
+$$skip = 1;
+</%INIT>

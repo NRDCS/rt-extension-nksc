@@ -1,0 +1,46 @@
+<table>
+	<tr>
+		<td>
+			<select id="article-select-chosen" name="Articles-Include-Article-Named-Hotlis" class="chosen-select">
+			</select>
+		</td>
+		<td>
+			<input type="radio" name="language" value="[LT]" checked>[LT]
+			<input type="radio" name="language" value="[EN]">[EN]
+		</td>
+	</td>
+</table>
+<br />
+<script type="text/javascript">
+	function loadValues (language) {
+		var $chosen = jQuery("#article-select-chosen");
+
+		$chosen.empty();
+		$chosen.append('<option><% loc('Select an Article to include') %></option>');
+		$chosen.trigger("chosen:updated");
+
+		jQuery.get(
+			"/Helpers/LoadArticles?language=" + language, 
+			function (response) {
+			   	jQuery.each(response, function (i, article) {
+			   		$chosen.append('<option value="' + article.id + '">' + article.name + '</option>');
+			   		$chosen.trigger("chosen:updated");
+			   	});
+			}
+		);
+	}
+
+	jQuery(document).ready(function() {
+		jQuery('input[name=language]').on('change', function() {
+			loadValues(jQuery(this).val());
+		});
+
+		jQuery('#article-select-chosen')
+			.chosen({ width: '100%'})
+			.change(function() {
+				jQuery(this).closest('form').submit();
+			});
+
+		loadValues('[LT]');
+	});
+</script>
