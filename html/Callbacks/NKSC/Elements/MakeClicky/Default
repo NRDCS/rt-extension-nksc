@@ -18,6 +18,11 @@ my $escaper = sub {
     return $content;
 }; 
 
+my $SelfService = 0;
+my $request_path = $HTML::Mason::Commands::r->path_info;
+$request_path =~ s!/{2,}!/!g;
+$SelfService = 1 if $request_path =~ m{^/SelfService/};
+
 my $urlResolver = sub {
     my $Ticket      = shift;
     my $CustomField = shift;
@@ -43,7 +48,7 @@ my $hashAction = sub {
     my $url = $urlResolver->($args{object}->Id, 'Hashes', lc $hash);
 
     return $args{value}
-        . " <a class='add-cf-value button' href='$url'>" 
+        . " <a class='add-cf-value button button-small' href='$url'>" 
         . loc('Add Hash') . "</a>";
 };
 
@@ -59,7 +64,7 @@ my $urlAction = sub {
     my $url = $urlResolver->($args{object}->Id, 'URLs', $args{value});
 
     return $args{value}
-        . " <a class='add-cf-value button' href='$url'>"
+        . " <a class='add-cf-value button button-small' href='$url'>"
         . loc('Add URL') . "</a>";
 };
 
@@ -74,13 +79,50 @@ my $timeAction = sub {
     my $url = $urlResolver->($args{object}->Id, 'Incident time', $args{value});
 
     return $args{value}
-        . " <a class='add-cf-value button' href='$url'>"
+        . " <a class='add-cf-value button button-small' href='$url'>"
         . loc('Add Incident Time') . "</a>";
+};
+
+# Redefining email makeclicky because original has bugs
+my $email1Action = sub {
+    my %args = @_;
+	$args{value} = $escaper->($args{value});
+
+        # don't execute on non-rtir tickets or in SelfService
+        return $escaper->($args{value}) unless defined $args{type} and !$SelfService;
+
+
+        my $email = $args{'value'}; $email =~ s/^<|>$//g;
+        my $escaped_email = $escaper->($email);
+
+        my $result = qq{<a class="button button-small" href="}.
+            RT::IR->HREFTo(qq{Tools/Lookup.html?$args{'lookup_params'}type=email&q=$escaped_email}). qq{">}
+            .loc('lookup email') .q{</a>};
+        if ( $args{'incident'} ) {
+            if ( $r->uri =~ /Lookup.html$/ ) {
+                $result .= qq{<input type="checkbox" name="Requestorbox-$escaped_email" unchecked />};
+            }
+            $result .= qq{<a class="button button-small" href="}.
+                RT::IR->HREFTo( "Create.html"
+                . qq{?Incident=$args{'incident'}}
+                . qq{&Lifecycle=}.RT::IR->lifecycle_investigation
+                . "&Requestors=$escaped_email")
+                . qq{">}
+                . loc('Investigate to') .qq{</a>};
+        }
+        my $domain = (split /@/, $email, 2)[1];
+        my $escaped_domain = $escaper->($domain);
+        $result .= ' <a class="button button-small" href="'. RT::IR->HREFTo(qq{Tools/Lookup.html?$args{'lo
+okup_params'}type=host&q=$escaped_domain}). '">'
+               .loc('lookup "[_1]"', $domain) .'</a>';
+        return $escaper->($args{'value'}) . qq{ <span class="clickylink">$result</span>};
+
 };
 
 my %actions = (
     hash    => $hashAction,
     url     => $urlAction,
+    email1   => $email1Action,
     time    => $timeAction
 );
 
@@ -94,6 +136,11 @@ my @types = (
         name   => 'url',
         regex  => qr{$RE{URI}{HTTP}{-keep}{-scheme => 'https?'}(?:#[^\s<]+)?(?<![.?!,;:])},
         action => 'url'
+    },
+    {
+        name   => 'email1',
+        regex  => qr{(?:mailto:)?<?[\w\.\+-]+\@[\w\.-]+\.\w{2,}>?},
+        action => 'email1'
     },
     {
         name   => 'time',
