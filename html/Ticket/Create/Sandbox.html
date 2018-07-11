@@ -3,7 +3,7 @@
     
 <& /Elements/ListActions, actions => \@results &>
 
-<form action="<% RT->Config->Get('WebPath') %>/Ticket/Create.html" enctype="multipart/form-data"
+<form action="<% RT->Config->Get('WebPath') %>/Ticket/Create/Sandbox.html" enctype="multipart/form-data"
 	method="post" name="TicketCreate" class="custom-ticket-form">
 	<input type="submit" name="SubmitTicket" value="Create" style="display:none">
 	<input type="hidden" class="hidden" name="id" value="new" />
